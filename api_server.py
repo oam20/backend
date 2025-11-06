@@ -25,6 +25,7 @@ default_origins = [
     "http://localhost:3000",
     "http://localhost:3001",
     "https://frontend-omega-tawny-35.vercel.app"
+    "https://formfrontend-tau.vercel.app"
 ]
 
 # Combine origins
