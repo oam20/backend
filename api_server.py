@@ -15,14 +15,49 @@ from config import SUPABASE_URL, SUPABASE_KEY, FLASK_HOST, FLASK_PORT, FLASK_DEB
 from get_system_details import collect_system_details, format_details_text, save_details_to_file
 
 app = Flask(__name__)
+
+# Get allowed origins from environment variable
+ALLOWED_ORIGINS_ENV = os.getenv('ALLOWED_ORIGINS', '')
+ALLOWED_ORIGINS = [origin.strip() for origin in ALLOWED_ORIGINS_ENV.split(',') if origin.strip()] if ALLOWED_ORIGINS_ENV else []
+
+# Default origins for development
+default_origins = [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "https://frontend-omega-tawny-35.vercel.app"
+]
+
+# Combine origins
+allowed_origins = list(set(ALLOWED_ORIGINS + default_origins)) if ALLOWED_ORIGINS else default_origins
+
 # Enable CORS for React frontend
-CORS(app, resources={
-    r"/api/*": {
-        "origins": [API_BASE_URL.replace(':5000', ':3000'), "http://localhost:3000"],
-        "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type"]
-    }
-})
+# Check if running on Vercel (production)
+is_vercel = os.getenv('VERCEL') is not None
+is_production = os.getenv('FLASK_ENV') == 'production' or os.getenv('ENVIRONMENT') == 'production'
+
+if is_vercel or is_production:
+    # In production/Vercel, allow all origins for API access
+    # This is common for public APIs
+    CORS(app, resources={
+        r"/api/*": {
+            "origins": "*",
+            "methods": ["GET", "POST", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization"],
+            "supports_credentials": False
+        }
+    })
+    print("CORS: Allowing all origins (production mode)")
+else:
+    # In development, use specific origins
+    CORS(app, resources={
+        r"/api/*": {
+            "origins": allowed_origins,
+            "methods": ["GET", "POST", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization"],
+            "supports_credentials": False
+        }
+    })
+    print(f"CORS: Allowing specific origins: {allowed_origins}")
 
 # Initialize Supabase client
 try:

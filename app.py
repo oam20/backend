@@ -4,4 +4,4 @@
 from api_server import app
 
 # Optionally expose application also as 'application' for WSGI compatibility:
-application = app
+# application = app
