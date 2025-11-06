@@ -403,7 +403,7 @@ def run_gui():
 
 
 if __name__ == "__main__":
-    format_output()
+    print("Running locally...")
     
     # Keep window open on Windows if double-clicked
     if sys.platform == 'win32':
