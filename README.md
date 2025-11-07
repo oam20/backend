@@ -171,7 +171,33 @@ Get a specific submission by ID.
 
 ## Client-Side Collection
 
-For accurate system details when the API is deployed on serverless platforms:
+### 🌐 Web Form Solution (Recommended)
+
+**For web forms where users just fill and submit:**
+
+1. Use the ready-made web form:
+   - `form-example.html` - Complete HTML form
+   - `system-collector.js` - JavaScript collector library
+   
+2. **Setup:**
+   - Update `API_URL` in `form-example.html`
+   - Host on any web server (GitHub Pages, Netlify, Vercel, etc.)
+   - Share the form URL with users
+
+3. **How it works:**
+   - User fills form (Employee ID, Email, Department)
+   - User clicks Submit
+   - JavaScript automatically collects system details
+   - Form submits with all data to API
+   - Done! ✅
+
+See `COMPLETE_SOLUTION.md` and `WEB_FORM_README.md` for detailed instructions.
+
+**Note:** Browser security limits access to some Windows-specific details (serial number, manufacturer, model). See below for complete details.
+
+### 💻 Python Client Collector
+
+For complete Windows system details (serial number, manufacturer, model):
 
 1. **Run the client collector on Windows machines:**
    ```bash
@@ -190,15 +216,20 @@ See `CLIENT_COLLECTOR_README.md` for detailed instructions.
 
 ```
 backend/
-├── api_server.py              # Flask API server
-├── get_system_details.py      # Core system info functions
-├── client_collector.py        # Client-side collector script
-├── config.py                  # Supabase configuration
-├── requirements.txt           # Python dependencies
-├── start_backend.bat          # Windows start script
-├── run_client_collector.bat   # Client collector launcher
-├── CLIENT_COLLECTOR_README.md # Client collector documentation
-└── README.md                  # This file
+├── api_server.py                  # Flask API server
+├── get_system_details.py          # Core system info functions
+├── client_collector.py            # Python client-side collector
+├── windows-helper-collector.py   # Windows helper for complete details
+├── form-example.html              # 🌐 Ready-to-use web form
+├── system-collector.js            # JavaScript collector library
+├── config.py                      # Supabase configuration
+├── requirements.txt               # Python dependencies
+├── start_backend.bat              # Windows start script
+├── run_client_collector.bat       # Client collector launcher
+├── COMPLETE_SOLUTION.md          # Complete solution guide
+├── WEB_FORM_README.md            # Web form documentation
+├── CLIENT_COLLECTOR_README.md     # Python client documentation
+└── README.md                      # This file
 ```
 
 ## Environment Variables
