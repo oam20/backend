@@ -137,6 +137,24 @@ def get_system_details():
                 os_info = details.get('os_info') or details.get('windows', {})
                 ram_info = details.get('ram', {})
                 
+                # Helper function to safely convert to numeric or None
+                def safe_numeric(value):
+                    """Convert value to numeric, or None if not numeric"""
+                    if value is None:
+                        return None
+                    if isinstance(value, (int, float)):
+                        return value
+                    if isinstance(value, str):
+                        # Check if it's a numeric string
+                        try:
+                            return float(value)
+                        except (ValueError, TypeError):
+                            # If it's "Not available", "Unknown", etc., return None
+                            if value.lower() in ['not available', 'unknown', 'n/a', 'na']:
+                                return None
+                            return None
+                    return None
+                
                 db_record = {
                     'employee_id': employee_id,
                     'email': email,
@@ -152,11 +170,11 @@ def get_system_details():
                     'windows_version': os_info.get('version'),
                     'windows_platform': os_info.get('platform'),
                     'windows_processor': os_info.get('processor'),
-                    'ram_total_gb': ram_info.get('total_gb') if 'error' not in ram_info else None,
-                    'ram_used_gb': ram_info.get('used_gb') if 'error' not in ram_info else None,
-                    'ram_available_gb': ram_info.get('available_gb') if 'error' not in ram_info else None,
-                    'ram_free_gb': ram_info.get('free_gb') if 'error' not in ram_info else None,
-                    'ram_used_percent': ram_info.get('used_percent') if 'error' not in ram_info else None,
+                    'ram_total_gb': safe_numeric(ram_info.get('total_gb')) if 'error' not in ram_info else None,
+                    'ram_used_gb': safe_numeric(ram_info.get('used_gb')) if 'error' not in ram_info else None,
+                    'ram_available_gb': safe_numeric(ram_info.get('available_gb')) if 'error' not in ram_info else None,
+                    'ram_free_gb': safe_numeric(ram_info.get('free_gb')) if 'error' not in ram_info else None,
+                    'ram_used_percent': safe_numeric(ram_info.get('used_percent')) if 'error' not in ram_info else None,
                     'storage_details': json.dumps(details.get('storage', [])),
                     'formatted_text': formatted_text,
                     'saved_file': filename

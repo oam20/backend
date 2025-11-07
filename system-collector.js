@@ -219,10 +219,10 @@ class SystemDetailsCollector {
         const totalGB = navigator.deviceMemory || 0;
         return {
           total_gb: totalGB,
-          available_gb: 'Not available',
-          used_gb: 'Not available',
-          free_gb: 'Not available',
-          used_percent: 'Not available',
+          available_gb: null,  // Use null instead of 'Not available' for database compatibility
+          used_gb: null,
+          free_gb: null,
+          used_percent: null,
           note: 'Browser API limitation - only total RAM available'
         };
       }
