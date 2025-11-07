@@ -34,11 +34,23 @@ except ImportError:
     print("Install it with: pip install psutil\n")
 
 
+def is_serverless_environment():
+    """Detect if running in a serverless/container environment"""
+    return (
+        os.getenv('VERCEL') is not None or
+        os.getenv('AWS_LAMBDA_FUNCTION_NAME') is not None or
+        os.getenv('FUNCTION_NAME') is not None or
+        os.getenv('K_SERVICE') is not None or  # Google Cloud Run
+        os.path.exists('/.dockerenv') or  # Docker container
+        os.getenv('container') is not None
+    )
+
+
 def get_username():
     """Get the current username"""
     try:
         return os.getlogin()
-    except:
+    except (OSError, AttributeError):
         try:
             return os.environ.get('USERNAME', os.environ.get('USER', 'Unknown'))
         except:
@@ -48,7 +60,16 @@ def get_username():
 def get_hostname():
     """Get the hostname"""
     try:
-        return socket.gethostname()
+        hostname = socket.gethostname()
+        # In serverless environments, hostname might be an IP or container ID
+        # Try to get FQDN if available
+        try:
+            fqdn = socket.getfqdn()
+            if fqdn and fqdn != hostname and '.' in fqdn:
+                return fqdn
+        except:
+            pass
+        return hostname
     except:
         return 'Unknown'
 
@@ -63,7 +84,8 @@ def get_system_manufacturer():
                     ["wmic", "computersystem", "get", "manufacturer"],
                     capture_output=True,
                     text=True,
-                    check=False
+                    check=False,
+                    timeout=5
                 )
                 output = (result.stdout or "").strip().splitlines()
                 values = [line.strip() for line in output if line and "Manufacturer" not in line]
@@ -80,9 +102,38 @@ def get_system_manufacturer():
                     "-Command",
                     "(Get-CimInstance Win32_ComputerSystem).Manufacturer"
                 ]
-                result = subprocess.run(ps_cmd, capture_output=True, text=True, check=False)
+                result = subprocess.run(ps_cmd, capture_output=True, text=True, check=False, timeout=5)
                 value = (result.stdout or "").strip()
                 if value:
+                    return value
+            except:
+                pass
+        elif sys.platform.startswith('linux'):
+            # Try to get manufacturer from DMI (Linux)
+            try:
+                result = subprocess.run(
+                    ["cat", "/sys/class/dmi/id/sys_vendor"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=2
+                )
+                value = (result.stdout or "").strip()
+                if value:
+                    return value
+            except:
+                pass
+            # Alternative: dmidecode (requires root)
+            try:
+                result = subprocess.run(
+                    ["dmidecode", "-s", "system-manufacturer"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=2
+                )
+                value = (result.stdout or "").strip()
+                if value and value.lower() not in ['', 'not specified', 'unknown']:
                     return value
             except:
                 pass
@@ -102,7 +153,8 @@ def get_system_model():
                     ["wmic", "computersystem", "get", "model"],
                     capture_output=True,
                     text=True,
-                    check=False
+                    check=False,
+                    timeout=5
                 )
                 output = (result.stdout or "").strip().splitlines()
                 values = [line.strip() for line in output if line and "Model" not in line]
@@ -119,9 +171,38 @@ def get_system_model():
                     "-Command",
                     "(Get-CimInstance Win32_ComputerSystem).Model"
                 ]
-                result = subprocess.run(ps_cmd, capture_output=True, text=True, check=False)
+                result = subprocess.run(ps_cmd, capture_output=True, text=True, check=False, timeout=5)
                 value = (result.stdout or "").strip()
                 if value:
+                    return value
+            except:
+                pass
+        elif sys.platform.startswith('linux'):
+            # Try to get model from DMI (Linux)
+            try:
+                result = subprocess.run(
+                    ["cat", "/sys/class/dmi/id/product_name"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=2
+                )
+                value = (result.stdout or "").strip()
+                if value:
+                    return value
+            except:
+                pass
+            # Alternative: dmidecode (requires root)
+            try:
+                result = subprocess.run(
+                    ["dmidecode", "-s", "system-product-name"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=2
+                )
+                value = (result.stdout or "").strip()
+                if value and value.lower() not in ['', 'not specified', 'unknown']:
                     return value
             except:
                 pass
@@ -146,78 +227,150 @@ def get_ip_address():
 
 
 def get_serial_number():
-    """Get machine serial number on Windows using WMIC or PowerShell fallback"""
-    # Try WMIC first (may be deprecated but often available)
+    """Get machine serial number"""
     try:
-        result = subprocess.run(
-            ["wmic", "bios", "get", "serialnumber"],
-            capture_output=True,
-            text=True,
-            check=False
-        )
-        output = (result.stdout or "").strip().splitlines()
-        values = [line.strip() for line in output if line and "SerialNumber" not in line]
-        if values:
-            return values[0]
+        if sys.platform == 'win32':
+            # Try WMIC first (may be deprecated but often available)
+            try:
+                result = subprocess.run(
+                    ["wmic", "bios", "get", "serialnumber"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=5
+                )
+                output = (result.stdout or "").strip().splitlines()
+                values = [line.strip() for line in output if line and "SerialNumber" not in line]
+                if values and values[0]:
+                    return values[0]
+            except:
+                pass
+
+            # PowerShell fallback (works on newer Windows)
+            try:
+                ps_cmd = [
+                    "powershell",
+                    "-NoProfile",
+                    "-Command",
+                    "(Get-CimInstance Win32_BIOS).SerialNumber"
+                ]
+                result = subprocess.run(ps_cmd, capture_output=True, text=True, check=False, timeout=5)
+                value = (result.stdout or "").strip()
+                if value:
+                    return value
+            except:
+                pass
+        elif sys.platform.startswith('linux'):
+            # Try to get serial from DMI (Linux)
+            try:
+                result = subprocess.run(
+                    ["cat", "/sys/class/dmi/id/product_serial"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=2
+                )
+                value = (result.stdout or "").strip()
+                if value and value.lower() not in ['', 'not specified', 'unknown', 'to be filled by o.e.m.']:
+                    return value
+            except:
+                pass
+            # Alternative: dmidecode (requires root)
+            try:
+                result = subprocess.run(
+                    ["dmidecode", "-s", "system-serial-number"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=2
+                )
+                value = (result.stdout or "").strip()
+                if value and value.lower() not in ['', 'not specified', 'unknown', 'to be filled by o.e.m.']:
+                    return value
+            except:
+                pass
+        
+        return 'Unknown'
     except:
-        pass
-
-    # PowerShell fallback (works on newer Windows)
-    try:
-        ps_cmd = [
-            "powershell",
-            "-NoProfile",
-            "-Command",
-            "(Get-CimInstance Win32_BIOS).SerialNumber"
-        ]
-        result = subprocess.run(ps_cmd, capture_output=True, text=True, check=False)
-        value = (result.stdout or "").strip()
-        if value:
-            return value
-    except:
-        pass
-
-    return 'Unknown'
+        return 'Unknown'
 
 
-def get_windows_version():
-    """Get Windows version details"""
+def get_os_info():
+    """Get OS/platform version details (works on Windows, Linux, macOS)"""
     try:
         version_info = {
             'system': platform.system(),
             'release': platform.release(),
             'version': platform.version(),
             'platform': platform.platform(),
-            'processor': platform.processor()
+            'processor': platform.processor() or platform.machine()
         }
         return version_info
     except:
-        return {'error': 'Could not retrieve Windows version'}
+        return {'error': 'Could not retrieve OS version'}
 
 
 def get_storage_details():
-    """Get storage details for all drives"""
+    """Get storage details for all drives/mounts"""
     storage_info = []
     try:
-        # Get all drives on Windows
-        drives = []
-        for letter in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ':
-            drive = f"{letter}:\\"
-            if os.path.exists(drive):
-                drives.append(drive)
-        
-        for drive in drives:
+        if sys.platform == 'win32':
+            # Get all drives on Windows
+            drives = []
+            for letter in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ':
+                drive = f"{letter}:\\"
+                if os.path.exists(drive):
+                    drives.append(drive)
+            
+            for drive in drives:
+                try:
+                    total, used, free = shutil.disk_usage(drive)
+                    storage_info.append({
+                        'drive': drive,
+                        'total_gb': round(total / (1024**3), 2),
+                        'used_gb': round(used / (1024**3), 2),
+                        'free_gb': round(free / (1024**3), 2),
+                        'used_percent': round((used / total) * 100, 2)
+                    })
+                except:
+                    continue
+        elif sys.platform.startswith('linux') or sys.platform == 'darwin':
+            # Get mount points on Linux/Unix
             try:
-                total, used, free = shutil.disk_usage(drive)
-                storage_info.append({
-                    'drive': drive,
-                    'total_gb': round(total / (1024**3), 2),
-                    'used_gb': round(used / (1024**3), 2),
-                    'free_gb': round(free / (1024**3), 2),
-                    'used_percent': round((used / total) * 100, 2)
-                })
-            except:
-                continue
+                if PSUTIL_AVAILABLE:
+                    partitions = psutil.disk_partitions()
+                    for partition in partitions:
+                        try:
+                            usage = psutil.disk_usage(partition.mountpoint)
+                            storage_info.append({
+                                'drive': partition.mountpoint,
+                                'device': partition.device,
+                                'fstype': partition.fstype,
+                                'total_gb': round(usage.total / (1024**3), 2),
+                                'used_gb': round(usage.used / (1024**3), 2),
+                                'free_gb': round(usage.free / (1024**3), 2),
+                                'used_percent': round((usage.used / usage.total) * 100, 2)
+                            })
+                        except PermissionError:
+                            continue
+                else:
+                    # Fallback: try common mount points
+                    common_mounts = ['/', '/home', '/var', '/tmp']
+                    for mount in common_mounts:
+                        if os.path.exists(mount):
+                            try:
+                                total, used, free = shutil.disk_usage(mount)
+                                storage_info.append({
+                                    'drive': mount,
+                                    'total_gb': round(total / (1024**3), 2),
+                                    'used_gb': round(used / (1024**3), 2),
+                                    'free_gb': round(free / (1024**3), 2),
+                                    'used_percent': round((used / total) * 100, 2)
+                                })
+                            except:
+                                continue
+            except Exception as e:
+                storage_info.append({'error': str(e)})
     except Exception as e:
         storage_info.append({'error': str(e)})
     
@@ -242,23 +395,69 @@ def get_ram_details():
         return {'error': 'psutil not available. Install with: pip install psutil'}
 
 
-def collect_system_details(employee_id: str, email: str, department: str):
-    """Collect all system details and include user-provided metadata."""
-    details = {
-        'employee_id': employee_id,
-        'email': email,
-        'department': department,
-        'collected_at': datetime.datetime.now().isoformat(),
-        'username': get_username(),
-        'hostname': get_hostname(),
-        'system_manufacturer': get_system_manufacturer(),
-        'system_model': get_system_model(),
-        'ip_address': get_ip_address(),
-        'serial_number': get_serial_number(),
-        'windows': get_windows_version(),
-        'storage': get_storage_details(),
-        'ram': get_ram_details(),
-    }
+def collect_system_details(employee_id: str, email: str, department: str, client_data: dict = None):
+    """Collect all system details and include user-provided metadata.
+    
+    Args:
+        employee_id: Employee identifier
+        email: Email address
+        department: Department name
+        client_data: Optional dict with client-collected system details to use instead of server-side collection.
+                    Should include: username, hostname, system_manufacturer, system_model, ip_address,
+                    serial_number, os_info (or windows), storage, ram, collected_at
+    
+    Note:
+        In serverless environments (Vercel, AWS Lambda, etc.), server-side collection will return
+        server environment details, not client details. Always provide client_data for accurate results.
+    """
+    # If client data is provided, use it (for client-side collection)
+    if client_data:
+        details = {
+            'employee_id': employee_id,
+            'email': email,
+            'department': department,
+            'collected_at': client_data.get('collected_at', datetime.datetime.now().isoformat()),
+            'username': client_data.get('username', 'Unknown'),
+            'hostname': client_data.get('hostname', 'Unknown'),
+            'system_manufacturer': client_data.get('system_manufacturer', 'Unknown'),
+            'system_model': client_data.get('system_model', 'Unknown'),
+            'ip_address': client_data.get('ip_address', 'Unknown'),
+            'serial_number': client_data.get('serial_number', 'Unknown'),
+            'os_info': client_data.get('os_info') or client_data.get('windows', {}),
+            'storage': client_data.get('storage', []),
+            'ram': client_data.get('ram', {}),
+        }
+        # Ensure os_info is properly formatted
+        if 'os_info' not in details or not details['os_info']:
+            details['os_info'] = client_data.get('windows', {})
+    else:
+        # Server-side collection (fallback)
+        # Warning: In serverless environments, this collects server info, not client info
+        if is_serverless_environment():
+            import warnings
+            warnings.warn(
+                "Server-side collection detected in serverless environment. "
+                "Data will reflect server environment, not client. "
+                "Consider providing client_data for accurate results.",
+                UserWarning
+            )
+        
+        details = {
+            'employee_id': employee_id,
+            'email': email,
+            'department': department,
+            'collected_at': datetime.datetime.now().isoformat(),
+            'username': get_username(),
+            'hostname': get_hostname(),
+            'system_manufacturer': get_system_manufacturer(),
+            'system_model': get_system_model(),
+            'ip_address': get_ip_address(),
+            'serial_number': get_serial_number(),
+            'os_info': get_os_info(),
+            'storage': get_storage_details(),
+            'ram': get_ram_details(),
+        }
+    
     return details
 
 
@@ -282,14 +481,14 @@ def format_details_text(details: dict) -> str:
     lines.append(f"Serial Number: {details.get('serial_number', '')}")
     lines.append("")
     lines.append("-" * 60)
-    lines.append("WINDOWS INFORMATION")
+    lines.append("OS/PLATFORM INFORMATION")
     lines.append("-" * 60)
-    win = details.get('windows', {}) or {}
-    lines.append(f"System: {win.get('system', 'N/A')}")
-    lines.append(f"Release: {win.get('release', 'N/A')}")
-    lines.append(f"Version: {win.get('version', 'N/A')}")
-    lines.append(f"Platform: {win.get('platform', 'N/A')}")
-    lines.append(f"Processor: {win.get('processor', 'N/A')}")
+    os_info = details.get('os_info') or details.get('windows', {}) or {}
+    lines.append(f"System: {os_info.get('system', 'N/A')}")
+    lines.append(f"Release: {os_info.get('release', 'N/A')}")
+    lines.append(f"Version: {os_info.get('version', 'N/A')}")
+    lines.append(f"Platform: {os_info.get('platform', 'N/A')}")
+    lines.append(f"Processor: {os_info.get('processor', 'N/A')}")
     lines.append("")
     lines.append("-" * 60)
     lines.append("STORAGE DETAILS")
