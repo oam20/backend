@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Details Form</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            color: #333;
+            margin-bottom: 8px;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        input[type="text"],
+        input[type="email"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus,
+        input[type="email"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .required {
+            color: #e74c3c;
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            color: #667eea;
+            margin-top: 10px;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .message {
+            margin-top: 20px;
+            padding: 12px;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            display: block;
+        }
+
+        .message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            display: block;
+        }
+
+        .info-note {
+            background: #e7f3ff;
+            border-left: 4px solid #2196F3;
+            padding: 12px;
+            margin-top: 20px;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #0c5460;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>System Details Form</h1>
+        <p class="subtitle">Please fill in your information. System details will be collected automatically.</p>
+        
+        <form id="systemForm">
+            <div class="form-group">
+                <label for="employee_id">Employee ID <span class="required">*</span></label>
+                <input type="text" id="employee_id" name="employee_id" required>
+            </div>
+
+            <div class="form-group">
+                <label for="email">Email <span class="required">*</span></label>
+                <input type="email" id="email" name="email" required>
+            </div>
+
+            <div class="form-group">
+                <label for="department">Department <span class="required">*</span></label>
+                <input type="text" id="department" name="department" required>
+            </div>
+
+            <button type="submit" id="submitBtn">
+                Submit
+            </button>
+
+            <div class="loading" id="loading">
+                Collecting system details and submitting...
+            </div>
+
+            <div class="message" id="message"></div>
+        </form>
+
+        <div class="info-note">
+            <strong>Note:</strong> System information (OS, browser, IP address, etc.) will be automatically collected when you submit this form.
+        </div>
+    </div>
+
+    <!-- Include the system collector -->
+    <script src="system-collector.js"></script>
+    <script>
+        // Configuration - Update this with your API URL
+        const API_URL = 'https://backend-blue-beta.vercel.app';
+
+        // Try to load Windows-collected system details from temp file
+        async function loadWindowsSystemDetails() {
+            try {
+                // This would require a backend endpoint to read the temp file
+                // For now, we'll use browser collection
+                return null;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        // Initialize collector
+        const collector = new SystemDetailsCollector();
+
+        // Handle form submission
+        document.getElementById('systemForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const submitBtn = document.getElementById('submitBtn');
+            const loading = document.getElementById('loading');
+            const message = document.getElementById('message');
+            
+            // Disable button and show loading
+            submitBtn.disabled = true;
+            loading.classList.add('show');
+            message.className = 'message';
+            message.style.display = 'none';
+
+            try {
+                // Get form data
+                const formData = {
+                    employee_id: document.getElementById('employee_id').value.trim(),
+                    email: document.getElementById('email').value.trim(),
+                    department: document.getElementById('department').value.trim()
+                };
+
+                // Validate
+                if (!formData.employee_id || !formData.email || !formData.department) {
+                    throw new Error('Please fill in all required fields');
+                }
+
+                // Collect system details
+                console.log('Collecting system details...');
+                const systemDetails = await collector.collect();
+                console.log('System details collected:', systemDetails);
+
+                // Prepare payload
+                const payload = {
+                    ...formData,
+                    system_details: systemDetails
+                };
+
+                // Send to API
+                console.log('Sending to API...');
+                const response = await fetch(`${API_URL}/api/system-details`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    // Success
+                    message.className = 'message success';
+                    message.textContent = 'Success! Your information has been submitted.';
+                    message.style.display = 'block';
+                    
+                    // Reset form
+                    document.getElementById('systemForm').reset();
+                } else {
+                    // Error from API
+                    throw new Error(result.error || 'Failed to submit form');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                message.className = 'message error';
+                message.textContent = `Error: ${error.message}`;
+                message.style.display = 'block';
+            } finally {
+                // Re-enable button and hide loading
+                submitBtn.disabled = false;
+                loading.classList.remove('show');
+            }
+        });
+    </script>
+</body>
+</html>
+
