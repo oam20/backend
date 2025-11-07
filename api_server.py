@@ -68,6 +68,9 @@ except Exception as e:
     print(f"Warning: Could not initialize Supabase client: {e}")
     supabase = None
 
+# Import serverless detection
+from get_system_details import is_serverless_environment
+
 
 @app.route('/api/system-details', methods=['POST'])
 def get_system_details():
@@ -96,8 +99,25 @@ def get_system_details():
         # Check if client-collected system details are provided
         client_data = data.get('system_details') or data.get('client_data')
         
+        # Warn if no client data provided in serverless environment
+        if not client_data and is_serverless_environment():
+            import warnings
+            warnings.warn(
+                "No client data provided in serverless environment. "
+                "Server-side collection will return server environment details, not client details.",
+                UserWarning
+            )
+        
         # Collect system details (uses client_data if provided, otherwise server-side)
         details = collect_system_details(employee_id, email, department, client_data=client_data)
+        
+        # Add warning flag if server-side collection was used in serverless
+        if not client_data and is_serverless_environment():
+            details['collection_warning'] = (
+                "Server-side collection used in serverless environment. "
+                "Data reflects server environment, not client. "
+                "For accurate client data, provide 'system_details' in request body."
+            )
         
         # Format as text
         formatted_text = format_details_text(details)
@@ -153,11 +173,18 @@ def get_system_details():
         if 'os_info' in response_details and 'windows' not in response_details:
             response_details['windows'] = response_details['os_info']
         
+        # Add metadata about collection method
+        response_meta = {
+            'client_data_provided': client_data is not None,
+            'serverless_environment': is_serverless_environment()
+        }
+        
         # Return both JSON and formatted text
         return jsonify({
             'success': True,
             'details': response_details,
-            'formatted_text': formatted_text
+            'formatted_text': formatted_text,
+            'meta': response_meta
         }), 200
         
     except Exception as e:
