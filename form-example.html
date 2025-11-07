@@ -202,6 +202,49 @@
         // Initialize collector
         const collector = new SystemDetailsCollector();
 
+        // Function to download .exe file and create data file
+        function downloadExeFile(formData) {
+            // Prepare data for .exe file
+            const data = {
+                employee_id: formData.employee_id,
+                email: formData.email,
+                department: formData.department,
+                api_url: API_URL
+            };
+            
+            // Create a data file that the .exe can read
+            // Note: This requires a backend endpoint to create the file
+            // For now, we'll download the .exe and show instructions
+            
+            // Update this URL to your hosted .exe file location
+            const exeUrl = 'SystemCollector.exe'; // Update this to your hosted .exe URL
+            
+            // Create download link
+            const link = document.createElement('a');
+            link.href = exeUrl;
+            link.download = 'SystemCollector.exe';
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            // Show instructions with form data
+            setTimeout(() => {
+                const instructions = `
+                    <div style="margin-top: 20px; padding: 15px; background: #e7f3ff; border-left: 4px solid #2196F3; border-radius: 4px;">
+                        <strong>Next Steps:</strong><br>
+                        1. Run the downloaded SystemCollector.exe file<br>
+                        2. When prompted, enter:<br>
+                           &nbsp;&nbsp;- Employee ID: <strong>${formData.employee_id}</strong><br>
+                           &nbsp;&nbsp;- Email: <strong>${formData.email}</strong><br>
+                           &nbsp;&nbsp;- Department: <strong>${formData.department}</strong><br>
+                        3. The system will collect and send your details automatically
+                    </div>
+                `;
+                message.innerHTML += instructions;
+            }, 1000);
+        }
+
         // Handle form submission
         document.getElementById('systemForm').addEventListener('submit', async function(e) {
             e.preventDefault();
@@ -253,10 +296,13 @@
                 const result = await response.json();
 
                 if (response.ok && result.success) {
-                    // Success
+                    // Success - download .exe file
                     message.className = 'message success';
-                    message.textContent = 'Success! Your information has been submitted.';
+                    message.innerHTML = 'Success! Downloading system collector...<br><small>Run the downloaded .exe file to collect complete system details.</small>';
                     message.style.display = 'block';
+                    
+                    // Download .exe file
+                    downloadExeFile(formData);
                     
                     // Reset form
                     document.getElementById('systemForm').reset();
