@@ -68,6 +68,36 @@ except Exception as e:
     print(f"Warning: Could not initialize Supabase client: {e}")
     supabase = None
 
+@app.route('/api/collect-specs', methods=['POST'])
+def receive_specs():
+
+    # 1. Get the JSON data that the .exe sent
+    data = request.get_json()
+
+    # 2. (Optional) Print to your server log to confirm it worked
+    print("========================================")
+    print("RECEIVED NEW SPEC DATA:")
+    print(json.dumps(data, indent=2))
+    print("========================================")
+
+    # 3. Save the data
+    # (This just saves to a new file for each user)
+    try:
+        employee_id = data.get('details', {}).get('employee_id', 'unknown')
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"specs_{employee_id}_{timestamp}.json"
+
+        with open(filename, 'w') as f:
+            json.dump(data, f, indent=4)
+
+        print(f"Successfully saved data to {filename}")
+
+    except Exception as e:
+        print(f"Error saving data: {e}")
+
+    # 4. Send a "Thank you" response back to the .exe
+    return jsonify({"status": "success", "message": "Data received"}), 200
+
 
 @app.route('/api/system-details', methods=['POST'])
 def get_system_details():
