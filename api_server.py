@@ -70,33 +70,167 @@ except Exception as e:
 
 @app.route('/api/collect-specs', methods=['POST'])
 def receive_specs():
-
-    # 1. Get the JSON data that the .exe sent
-    data = request.get_json()
-
-    # 2. (Optional) Print to your server log to confirm it worked
-    print("========================================")
-    print("RECEIVED NEW SPEC DATA:")
-    print(json.dumps(data, indent=2))
-    print("========================================")
-
-    # 3. Save the data
-    # (This just saves to a new file for each user)
+    """API endpoint to receive system specs from the executable"""
     try:
-        employee_id = data.get('details', {}).get('employee_id', 'unknown')
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"specs_{employee_id}_{timestamp}.json"
+        # 1. Get the JSON data that the .exe sent
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"status": "error", "message": "No data provided"}), 400
 
-        with open(filename, 'w') as f:
-            json.dump(data, f, indent=4)
+        # 2. Extract details from the data structure sent by executable
+        details = data.get('details', {})
+        if not details:
+            return jsonify({"status": "error", "message": "No details in data"}), 400
 
-        print(f"Successfully saved data to {filename}")
+        # 3. Extract required fields
+        employee_id = details.get('employee_id', '').strip()
+        email = details.get('email', '').strip()
+        department = details.get('department', '').strip()
+        
+        # Validate required fields
+        if not employee_id or not email or not department:
+            return jsonify({
+                "status": "error",
+                "message": "Missing required fields: employee_id, email, department"
+            }), 400
+
+        # 4. Print to server log for debugging
+        print("========================================")
+        print("RECEIVED NEW SPEC DATA FROM EXECUTABLE:")
+        print(f"Employee ID: {employee_id}")
+        print(f"Email: {email}")
+        print(f"Department: {department}")
+        print("========================================")
+
+        # 5. Save to Supabase database (if available)
+        db_id = None
+        if supabase:
+            try:
+                # Support both os_info and windows for backward compatibility
+                os_info = details.get('os_info') or details.get('windows', {})
+                ram_info = details.get('ram', {})
+                storage_info = details.get('storage', [])
+                
+                # Helper function to safely convert to numeric or None
+                def safe_numeric(value):
+                    """Convert value to numeric, or None if not numeric"""
+                    if value is None:
+                        return None
+                    if isinstance(value, (int, float)):
+                        return value
+                    if isinstance(value, str):
+                        try:
+                            return float(value)
+                        except (ValueError, TypeError):
+                            if value.lower() in ['not available', 'unknown', 'n/a', 'na']:
+                                return None
+                            return None
+                    return None
+                
+                # Format storage details as JSON string
+                storage_json = json.dumps(storage_info) if storage_info else None
+                
+                # Format the full details as text (for formatted_text field)
+                formatted_text = f"""
+System Details Collection
+==========================
+Employee ID: {employee_id}
+Email: {email}
+Department: {department}
+Collected At: {details.get('collected_at', 'N/A')}
+
+System Information:
+-------------------
+Username: {details.get('username', 'Unknown')}
+Hostname: {details.get('hostname', 'Unknown')}
+IP Address: {details.get('ip_address', 'Unknown')}
+System Manufacturer: {details.get('system_manufacturer', 'Unknown')}
+System Model: {details.get('system_model', 'Unknown')}
+Serial Number: {details.get('serial_number', 'Unknown')}
+
+OS Information:
+---------------
+System: {os_info.get('system', 'Unknown')}
+Release: {os_info.get('release', 'Unknown')}
+Version: {os_info.get('version', 'Unknown')}
+Platform: {os_info.get('platform', 'Unknown')}
+Processor: {os_info.get('processor', 'Unknown')}
+
+RAM Details:
+------------
+Total RAM: {ram_info.get('total_gb', 'N/A')} GB
+Used RAM: {ram_info.get('used_gb', 'N/A')} GB ({ram_info.get('used_percent', 'N/A')}%)
+Available RAM: {ram_info.get('available_gb', 'N/A')} GB
+Free RAM: {ram_info.get('free_gb', 'N/A')} GB
+
+Storage Details:
+----------------
+{json.dumps(storage_info, indent=2) if storage_info else 'No storage information'}
+"""
+                
+                db_record = {
+                    'employee_id': employee_id,
+                    'email': email,
+                    'department': department,
+                    'username': details.get('username'),
+                    'hostname': details.get('hostname'),
+                    'system_manufacturer': details.get('system_manufacturer'),
+                    'system_model': details.get('system_model'),
+                    'ip_address': details.get('ip_address'),
+                    'serial_number': details.get('serial_number'),
+                    'windows_system': os_info.get('system'),
+                    'windows_release': os_info.get('release'),
+                    'windows_version': os_info.get('version'),
+                    'windows_platform': os_info.get('platform'),
+                    'windows_processor': os_info.get('processor'),
+                    'ram_total_gb': safe_numeric(ram_info.get('total_gb')) if 'error' not in ram_info else None,
+                    'ram_used_gb': safe_numeric(ram_info.get('used_gb')) if 'error' not in ram_info else None,
+                    'ram_available_gb': safe_numeric(ram_info.get('available_gb')) if 'error' not in ram_info else None,
+                    'ram_free_gb': safe_numeric(ram_info.get('free_gb')) if 'error' not in ram_info else None,
+                    'ram_used_percent': safe_numeric(ram_info.get('used_percent')) if 'error' not in ram_info else None,
+                    'storage_details': storage_json,
+                    'formatted_text': formatted_text,
+                    'saved_file': None  # No file saved for executable submissions
+                }
+                
+                result = supabase.table('system_details').insert(db_record).execute()
+                db_id = result.data[0]['id'] if result.data else None
+                print(f"Successfully saved to database with ID: {db_id}")
+                
+            except Exception as e:
+                print(f"Error saving to Supabase database: {e}")
+                # Continue even if database save fails (will still save to file)
+        
+        # 6. Also save to file as backup (optional)
+        try:
+            import datetime
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"specs_{employee_id}_{timestamp}.json"
+            
+            with open(filename, 'w') as f:
+                json.dump(data, f, indent=4)
+            
+            print(f"Successfully saved data to file: {filename}")
+        except Exception as e:
+            print(f"Error saving to file: {e}")
+
+        # 7. Send success response back to the .exe
+        response = {
+            "status": "success",
+            "message": "Data received and saved successfully",
+        }
+        if db_id:
+            response["db_id"] = db_id
+            
+        return jsonify(response), 200
 
     except Exception as e:
-        print(f"Error saving data: {e}")
-
-    # 4. Send a "Thank you" response back to the .exe
-    return jsonify({"status": "success", "message": "Data received"}), 200
+        print(f"Error in receive_specs: {e}")
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
 
 
 @app.route('/api/system-details', methods=['POST'])
