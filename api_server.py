@@ -101,7 +101,11 @@ def receive_specs():
 
 @app.route('/api/system-details', methods=['POST'])
 def get_system_details():
-    """API endpoint to collect system details"""
+    """API endpoint to collect system details
+    
+    Accepts client-collected system details in the request body.
+    If client_data is provided, uses it; otherwise falls back to server-side collection.
+    """
     try:
         data = request.get_json()
         
@@ -119,8 +123,28 @@ def get_system_details():
                 'required': ['employee_id', 'email', 'department']
             }), 400
         
-        # Collect system details
-        details = collect_system_details(employee_id, email, department)
+        # Check if client-collected system details are provided
+        client_data = data.get('system_details') or data.get('client_data')
+        
+        # Warn if no client data provided in serverless environment
+        if not client_data and is_serverless_environment():
+            import warnings
+            warnings.warn(
+                "No client data provided in serverless environment. "
+                "Server-side collection will return server environment details, not client details.",
+                UserWarning
+            )
+        
+        # Collect system details (uses client_data if provided, otherwise server-side)
+        details = collect_system_details(employee_id, email, department, client_data=client_data)
+        
+        # Add warning flag if server-side collection was used in serverless
+        if not client_data and is_serverless_environment():
+            details['collection_warning'] = (
+                "Server-side collection used in serverless environment. "
+                "Data reflects server environment, not client. "
+                "For accurate client data, provide 'system_details' in request body."
+            )
         
         # Format as text
         formatted_text = format_details_text(details)
@@ -136,8 +160,27 @@ def get_system_details():
         # Save to Supabase database
         if supabase:
             try:
-                windows_info = details.get('windows', {})
+                # Support both os_info and windows for backward compatibility
+                os_info = details.get('os_info') or details.get('windows', {})
                 ram_info = details.get('ram', {})
+                
+                # Helper function to safely convert to numeric or None
+                def safe_numeric(value):
+                    """Convert value to numeric, or None if not numeric"""
+                    if value is None:
+                        return None
+                    if isinstance(value, (int, float)):
+                        return value
+                    if isinstance(value, str):
+                        # Check if it's a numeric string
+                        try:
+                            return float(value)
+                        except (ValueError, TypeError):
+                            # If it's "Not available", "Unknown", etc., return None
+                            if value.lower() in ['not available', 'unknown', 'n/a', 'na']:
+                                return None
+                            return None
+                    return None
                 
                 db_record = {
                     'employee_id': employee_id,
@@ -149,16 +192,16 @@ def get_system_details():
                     'system_model': details.get('system_model'),
                     'ip_address': details.get('ip_address'),
                     'serial_number': details.get('serial_number'),
-                    'windows_system': windows_info.get('system'),
-                    'windows_release': windows_info.get('release'),
-                    'windows_version': windows_info.get('version'),
-                    'windows_platform': windows_info.get('platform'),
-                    'windows_processor': windows_info.get('processor'),
-                    'ram_total_gb': ram_info.get('total_gb') if 'error' not in ram_info else None,
-                    'ram_used_gb': ram_info.get('used_gb') if 'error' not in ram_info else None,
-                    'ram_available_gb': ram_info.get('available_gb') if 'error' not in ram_info else None,
-                    'ram_free_gb': ram_info.get('free_gb') if 'error' not in ram_info else None,
-                    'ram_used_percent': ram_info.get('used_percent') if 'error' not in ram_info else None,
+                    'windows_system': os_info.get('system'),
+                    'windows_release': os_info.get('release'),
+                    'windows_version': os_info.get('version'),
+                    'windows_platform': os_info.get('platform'),
+                    'windows_processor': os_info.get('processor'),
+                    'ram_total_gb': safe_numeric(ram_info.get('total_gb')) if 'error' not in ram_info else None,
+                    'ram_used_gb': safe_numeric(ram_info.get('used_gb')) if 'error' not in ram_info else None,
+                    'ram_available_gb': safe_numeric(ram_info.get('available_gb')) if 'error' not in ram_info else None,
+                    'ram_free_gb': safe_numeric(ram_info.get('free_gb')) if 'error' not in ram_info else None,
+                    'ram_used_percent': safe_numeric(ram_info.get('used_percent')) if 'error' not in ram_info else None,
                     'storage_details': json.dumps(details.get('storage', [])),
                     'formatted_text': formatted_text,
                     'saved_file': filename
@@ -170,11 +213,23 @@ def get_system_details():
                 print(f"Error saving to Supabase: {e}")
                 details['db_error'] = str(e)
         
+        # Add backward compatibility: include 'windows' field if 'os_info' exists
+        response_details = details.copy()
+        if 'os_info' in response_details and 'windows' not in response_details:
+            response_details['windows'] = response_details['os_info']
+        
+        # Add metadata about collection method
+        response_meta = {
+            'client_data_provided': client_data is not None,
+            'serverless_environment': is_serverless_environment()
+        }
+        
         # Return both JSON and formatted text
         return jsonify({
             'success': True,
-            'details': details,
-            'formatted_text': formatted_text
+            'details': response_details,
+            'formatted_text': formatted_text,
+            'meta': response_meta
         }), 200
         
     except Exception as e:
